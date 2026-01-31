@@ -427,7 +427,6 @@ else:
             </h3>
             <p style="margin-top:10px; font-size:1.1rem;">你的回答: <b>{st.session_state.q_user_text}</b></p>
             {f'<p style="color:#64748b; font-size:0.9em;">AI 評語: {st.session_state.q_ai_msg}</p>' if st.session_state.q_ai_msg else ''}
-            <p style="margin-top:10px; font-size:1.1rem;">✅ {target_answer}</b></p>
             ✅ {target_answer}
         </div>
         """, unsafe_allow_html=True)
