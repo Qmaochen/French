@@ -1,0 +1,7 @@
+streamlit
+pandas
+edge-tts
+streamlit-mic-recorder
+rapidfuzz
+groq
+st-gsheets-connection
