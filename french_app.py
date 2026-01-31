@@ -458,11 +458,15 @@ else:
                 try:
                     praises = ["Très bien !", "Excellent !", "Bravo !", "Magnifique !", "C'est super !"]
                     praise_text = random.choice(praises)
-                    # 直接呼叫現有的 play_audio 函式生成語音
+                        
+                    # 生成音檔
                     praise_audio = asyncio.run(play_audio(praise_text))
-                    autoplay_audio(praise_audio)
+                        
+                    # 💡 改用這行，不要用 autoplay_audio 函數
+                    st.audio(praise_audio, format="audio/mp3", autoplay=True)
+                        
                 except Exception as e:
-                    print(f"Audio Error: {e}")
+                    st.error(f"Audio Error: {e}")
                 df.at[current_idx, 'Times'] += 1
                 days_to_add = int(df.at[current_idx, 'Times'])
                 df.at[current_idx, 'Next'] = today + timedelta(days=days_to_add)
