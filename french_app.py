@@ -10,6 +10,7 @@ from groq import Groq
 import os
 import re
 import random
+import base64
 from streamlit_gsheets import GSheetsConnection  # 新增引用
 
 # --- 🎨 1. UI 設定 ---
@@ -220,6 +221,16 @@ def llm_grade_answer(api_key, user_text, context_text, correct_answer):
         return float(match.group()) if match else 0.0, "AI Graded"
     except:
         return 0.0, "AI Error"
+    
+def autoplay_audio(audio_data):
+    """自動播放二進位音訊資料"""
+    b64 = base64.b64encode(audio_data).decode()
+    md = f"""
+        <audio autoplay style="display:none;">
+        <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
+        </audio>
+    """
+    st.markdown(md, unsafe_allow_html=True)
 
 # --- 4. 初始化 Session State ---
 
@@ -444,6 +455,14 @@ else:
         # 存檔邏輯
         if st.session_state.q_saved_idx != current_idx:
             if st.session_state.q_grade >= 80:
+                try:
+                    praises = ["Très bien !", "Excellent !", "Bravo !", "Magnifique !", "C'est super !"]
+                    praise_text = random.choice(praises)
+                    # 直接呼叫現有的 play_audio 函式生成語音
+                    praise_audio = asyncio.run(play_audio(praise_text))
+                    autoplay_audio(praise_audio)
+                except Exception as e:
+                    print(f"Audio Error: {e}")
                 df.at[current_idx, 'Times'] += 1
                 days_to_add = int(df.at[current_idx, 'Times'])
                 df.at[current_idx, 'Next'] = today + timedelta(days=days_to_add)
