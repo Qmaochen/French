@@ -222,15 +222,26 @@ def llm_grade_answer(api_key, user_text, context_text, correct_answer):
     except:
         return 0.0, "AI Error"
     
-def autoplay_audio(audio_data):
-    """自動播放二進位音訊資料"""
-    b64 = base64.b64encode(audio_data).decode()
-    md = f"""
-        <audio autoplay style="display:none;">
-        <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
-        </audio>
-    """
-    st.markdown(md, unsafe_allow_html=True)
+def play_hidden_sound(text):
+    """生成語音並隱藏播放，完全不顯示播放器"""
+    try:
+        # 1. 生成語音 (法文)
+        audio_bytes = asyncio.run(play_audio(text))
+        
+        # 2. 轉成 Base64
+        b64 = base64.b64encode(audio_bytes).decode()
+        
+        # 3. 嵌入隱藏的 HTML (沒有 controls 屬性，且 style 設為 none)
+        md = f"""
+            <audio autoplay="true" style="display:none;">
+            <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
+            </audio>
+        """
+        # 4. 寫入網頁
+        st.markdown(md, unsafe_allow_html=True)
+        
+    except Exception as e:
+        print(f"Sound Error: {e}")
 
 # --- 4. 初始化 Session State ---
 
@@ -455,18 +466,12 @@ else:
         # 存檔邏輯
         if st.session_state.q_saved_idx != current_idx:
             if st.session_state.q_grade >= 80:
-                try:
-                    praises = ["Très bien !", "Excellent !", "Bravo !", "Magnifique !", "C'est super !"]
-                    praise_text = random.choice(praises)
-                        
-                    # 生成音檔
-                    praise_audio = asyncio.run(play_audio(praise_text))
-                        
-                    # 💡 改用這行，不要用 autoplay_audio 函數
-                    st.audio(praise_audio, format="audio/mp3", autoplay=True)
-                        
-                except Exception as e:
-                    st.error(f"Audio Error: {e}")
+                praises = ["Très bien !", "Excellent !", "Bravo !", "Magnifique !", "C'est super !"]
+                praise_text = random.choice(praises)
+                
+                # 直接呼叫我們剛寫好的隱形函數
+                play_hidden_sound(praise_text)
+                
                 df.at[current_idx, 'Times'] += 1
                 days_to_add = int(df.at[current_idx, 'Times'])
                 df.at[current_idx, 'Next'] = today + timedelta(days=days_to_add)
