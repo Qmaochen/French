@@ -23,14 +23,15 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    /* 隱藏預設元件，但保留 Header */
+    /* 隱藏預設元件 */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     .stDeployButton {display:none;}
     
-    /* 全局樣式 */
+    /* 全局樣式 - 加深文字顏色 */
     .stApp {
         background-color: #f8f9fa;
+        color: #111827; /* 全局深色字 */
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
     
@@ -43,9 +44,9 @@ st.markdown("""
         background-color: #ffffff;
         padding: 40px;
         border-radius: 24px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08); /* 陰影稍微加深 */
         margin-bottom: 25px;
-        border: 1px solid #edf2f7;
+        border: 1px solid #e5e7eb;
         text-align: center;
         transition: all 0.3s ease;
     }
@@ -55,7 +56,7 @@ st.markdown("""
         padding: 6px 16px;
         border-radius: 50px;
         background-color: #e0e7ff;
-        color: #4338ca;
+        color: #3730a3; /* 標籤文字加深 */
         font-size: 0.85rem;
         font-weight: 700;
         letter-spacing: 1px;
@@ -63,19 +64,21 @@ st.markdown("""
         margin-bottom: 20px;
     }
 
+    /* 主要題目：純黑、大字 */
     .big-font {
-        font-size: 20px !important;
-        font-weight: 700;
-        color: #1e293b;
+        font-size: 22px !important;
+        font-weight: 800; /* 加粗 */
+        color: #000000;   /* 純黑 */
         line-height: 1.5;
         margin: 20px 0;
     }
     
+    /* 提示文字：深灰 */
     .hint-text {
-        color: #64748b;
-        font-size: 0.95rem;
+        color: #374151; /* 深灰 */
+        font-size: 1rem;
         margin-bottom: 15px;
-        font-weight: 500;
+        font-weight: 600;
     }
 
     .stAudio {
@@ -89,20 +92,18 @@ st.markdown("""
         font-weight: 600;
         padding: 0.6rem 1.2rem;
         border: none;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        transition: all 0.2s ease;
-    }
-    div.stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        color: #000000; /* 按鈕文字強制黑色 */
     }
     
     div.stTextInput > div > div > input {
         border-radius: 12px;
         padding: 12px;
-        border: 1px solid #e2e8f0;
+        border: 1px solid #cbd5e1; /* 邊框加深 */
         text-align: center;
         font-size: 1.1rem;
+        color: #000000; /* 輸入文字強制黑色 */
+        font-weight: 600;
     }
 
     iframe {
@@ -111,18 +112,12 @@ st.markdown("""
     }
     
     .result-box {
-        background-color: #f8fafc;
-        border: 1px solid #e2e8f0;
+        background-color: #f1f5f9; /* 背景稍微加深一點點 */
+        border: 1px solid #cbd5e1;
         border-radius: 16px;
         padding: 24px;
         margin-top: 20px;
         text-align: left;
-    }
-    
-    .correct-answer {
-        color: #059669;
-        font-weight: 600;
-        margin-top: 8px;
     }
 </style>
 """, unsafe_allow_html=True)
