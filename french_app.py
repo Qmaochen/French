@@ -234,7 +234,7 @@ def play_hidden_sound(text):
         # 3. 嵌入隱藏的 HTML (沒有 controls 屬性，且 style 設為 none)
         md = f"""
             <audio autoplay="true" style="display:none;">
-            <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
+            <source src="data:audio/mpeg;base64,{b64}" type="audio/mpeg">
             </audio>
         """
         # 4. 寫入網頁
@@ -392,7 +392,8 @@ else:
 
     # 3. 顯示音檔 (如果需要一開始就播)
     if show_audio_initially:
-        st.audio(audio_bytes, format='audio/mp3')
+    # 記得要在開頭 import BytesIO (你原本的程式碼第 6 行已經有 import 了，所以直接用)
+        st.audio(BytesIO(audio_bytes), format='audio/mpeg')
 
     # === [Input Phase] 輸入階段 ===
     if not st.session_state.q_processed:
@@ -457,7 +458,7 @@ else:
         # 注意：這裡的音檔已經改成唸 Answer 了
         if not show_audio_initially:
             st.caption("🔊 音檔 (答案):")
-            st.audio(audio_bytes, format='audio/mp3')
+            st.audio(BytesIO(audio_bytes), format='audio/mpeg')
 
         # 補救顯示 - 原文
         if not show_text_initially:
