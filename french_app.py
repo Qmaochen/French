@@ -11,7 +11,6 @@ import os
 import re
 import random
 import base64
-import json
 from streamlit_gsheets import GSheetsConnection
 
 # --- 🎨 1. UI 設定 ---
@@ -32,7 +31,7 @@ st.markdown("""
     /* 全局樣式 - 加深文字顏色 */
     .stApp {
         background-color: #f8f9fa;
-        color: #111827; /* 全局深色字 */
+        color: #111827;
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
     
@@ -45,7 +44,7 @@ st.markdown("""
         background-color: #ffffff;
         padding: 40px;
         border-radius: 24px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.08); /* 陰影稍微加深 */
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         margin-bottom: 25px;
         border: 1px solid #e5e7eb;
         text-align: center;
@@ -57,7 +56,7 @@ st.markdown("""
         padding: 6px 16px;
         border-radius: 50px;
         background-color: #e0e7ff;
-        color: #3730a3; /* 標籤文字加深 */
+        color: #3730a3;
         font-size: 0.85rem;
         font-weight: 700;
         letter-spacing: 1px;
@@ -68,15 +67,15 @@ st.markdown("""
     /* 主要題目：純黑、大字 */
     .big-font {
         font-size: 22px !important;
-        font-weight: 800; /* 加粗 */
-        color: #000000;   /* 純黑 */
+        font-weight: 800;
+        color: #000000;
         line-height: 1.5;
         margin: 20px 0;
     }
     
     /* 提示文字：深灰 */
     .hint-text {
-        color: #374151; /* 深灰 */
+        color: #374151;
         font-size: 1rem;
         margin-bottom: 15px;
         font-weight: 600;
@@ -94,16 +93,16 @@ st.markdown("""
         padding: 0.6rem 1.2rem;
         border: none;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        color: #000000; /* 按鈕文字強制黑色 */
+        color: #000000;
     }
     
     div.stTextInput > div > div > input {
         border-radius: 12px;
         padding: 12px;
-        border: 1px solid #cbd5e1; /* 邊框加深 */
+        border: 1px solid #cbd5e1;
         text-align: center;
         font-size: 1.1rem;
-        color: #00008B; /* 輸入文字強制黑色 */
+        color: #00008B;
         font-weight: 600;
     }
 
@@ -113,7 +112,7 @@ st.markdown("""
     }
     
     .result-box {
-        background-color: #f1f5f9; /* 背景稍微加深一點點 */
+        background-color: #f1f5f9;
         border: 1px solid #cbd5e1;
         border-radius: 16px;
         padding: 24px;
@@ -138,30 +137,39 @@ def load_data():
 
     df.columns = df.columns.str.strip()
     required = ['Sentences', 'Tags', 'Answers', 'Captions', 'Date', 'Times', 'Next']
+    
     for col in required:
         if col not in df.columns:
-            # 如果欄位不存在，建立空欄位
-            df[col] = "" 
-            # 針對數值型欄位給予預設值
-            if col == 'Times': df[col] = 0
-    
-    # 強制轉型 Times
+            if col == 'Times':
+                df[col] = 0
+            elif col in ['Next', 'Date']:
+                # 若欄位不存在，預設給一個過去的時間字串
+                df[col] = pd.Timestamp.now().strftime('%Y-%m-%d')
+            else:
+                df[col] = ""
+
+    # [Fix] 強制轉型 Times 為整數
     df['Times'] = pd.to_numeric(df['Times'], errors='coerce').fillna(0).astype(int)
     
-    # Next 與 Date 在這裡先不做複雜轉換，留給後面強力清洗區塊處理
+    # [Fix] Next 先轉為字串，避免混合型別，主要處理在主程式進行
+    df['Next'] = df['Next'].astype(str)
+    
     return df.dropna(subset=['Sentences'])
 
 def save_data(df):
     try:
-        # 將日期轉為字串格式存入 Google Sheet，避免格式錯亂
+        # [Fix] 將日期轉為字串格式存入 Google Sheet，避免格式錯亂
         save_df = df.copy()
         
-        # 確保要存回去的日期欄位都是 String 格式
-        # 注意：我們在主程式邏輯已經把 Date/Next 轉成 string 了，這裡做個雙重保險
-        if 'Next' in save_df.columns:
-            save_df['Next'] = save_df['Next'].astype(str)
+        # 確保 Next 是 Timestamp 格式後再轉字串，如果已經是字串則不變
+        if pd.api.types.is_datetime64_any_dtype(save_df['Next']):
+             save_df['Next'] = save_df['Next'].dt.strftime('%Y-%m-%d')
+        
+        # 處理 Date 欄位
         if 'Date' in save_df.columns:
-            save_df['Date'] = save_df['Date'].astype(str)
+             # 如果是 datetime 物件就轉字串，否則保持原樣 (假設已經是字串)
+             if pd.api.types.is_datetime64_any_dtype(save_df['Date']):
+                save_df['Date'] = save_df['Date'].dt.strftime('%Y-%m-%d')
 
         conn.update(worksheet="Sheet1", data=save_df)
         st.cache_data.clear() # 清除快取以防萬一
@@ -199,12 +207,13 @@ def transcribe_with_groq(api_key, audio_bytes):
     except Exception as e:
         return f"Error: {str(e)}"
 
+import json 
+
 def llm_grade_answer(api_key, user_text, context_text, correct_answer):
     if not api_key: return 0.0, "請輸入 API Key"
     
     client = Groq(api_key=api_key)
     
-    # 修改 Prompt：要求 JSON 格式，並強調給予修正建議
     prompt = f"""
     You are a strictly helpful French language tutor.
     
@@ -232,13 +241,11 @@ def llm_grade_answer(api_key, user_text, context_text, correct_answer):
         chat = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
             model="llama-3.3-70b-versatile",
-            # 加上這個參數強制讓模型輸出 JSON，降低格式錯誤機率
             response_format={"type": "json_object"} 
         )
         
         content = chat.choices[0].message.content
         
-        # 解析 JSON
         data = json.loads(content)
         score = float(data.get("score", 0.0))
         feedback = data.get("feedback", "No feedback provided.")
@@ -246,7 +253,6 @@ def llm_grade_answer(api_key, user_text, context_text, correct_answer):
         return score, feedback
 
     except json.JSONDecodeError:
-        # 如果 JSON 解析失敗，嘗試用舊方法的 regex 抓分數做為備案
         match = re.search(r'\d+(\.\d+)?', content)
         fallback_score = float(match.group()) if match else 0.0
         return fallback_score, "格式解析錯誤，但已記錄分數。"
@@ -257,19 +263,13 @@ def llm_grade_answer(api_key, user_text, context_text, correct_answer):
 def play_hidden_sound(text):
     """生成語音並隱藏播放，完全不顯示播放器"""
     try:
-        # 1. 生成語音 (法文)
         audio_bytes = asyncio.run(play_audio(text))
-        
-        # 2. 轉成 Base64
         b64 = base64.b64encode(audio_bytes).decode()
-        
-        # 3. 嵌入隱藏的 HTML (沒有 controls 屬性，且 style 設為 none)
         md = f"""
             <audio autoplay="true" style="display:none;">
             <source src="data:audio/mpeg;base64,{b64}" type="audio/mpeg">
             </audio>
         """
-        # 4. 寫入網頁
         st.markdown(md, unsafe_allow_html=True)
         
     except Exception as e:
@@ -317,22 +317,24 @@ st.title("🇫🇷 French SRS Master")
 if not groq_api_key:
     st.info("💡 提示：請在左側選單輸入 API Key 以啟用語音功能。")
 
-# ==========================================
-# 1. 日期資料強力清洗 (修正版)
-# ==========================================
+# --- [Fix] 日期處理核心修正 ---
+
 df = st.session_state.df
-today = datetime.now().date()
+
+# [Fix] 1. 使用 Pandas Timestamp 獲取今日，並正規化到午夜 00:00:00
+# 這樣才能與 DataFrame 中的 datetime64[ns] 欄位直接比較，避免 TypeError
+today = pd.Timestamp.now().normalize()
 
 try:
-    # 步驟 A: 先全部轉成字串，並去除前後空白
-    df['Next'] = df['Next'].astype(str).str.strip()
+    # 步驟 A: 先清理字串，處理 2026/2/6 與 2026-2-6 的格式差異
+    df['Next'] = df['Next'].astype(str).str.strip().str.replace('/', '-', regex=False)
     
-    # 步驟 B: 將斜線 '/' 替換成橫線 '-' (解決 2026/2/6 格式問題)
-    df['Next'] = df['Next'].str.replace('/', '-', regex=False)
+    # 步驟 B: 轉為 Pandas datetime 物件 (強制轉換，錯誤變 NaT)
+    # 注意：這裡不要加 .dt.date，保持它是 Timestamp 格式以便計算和比較
+    df['Next'] = pd.to_datetime(df['Next'], errors='coerce')
     
-    # 步驟 C: 轉為日期物件
-    # errors='coerce' 代表解析失敗變成 NaT，不會報錯
-    df['Next_Obj'] = pd.to_datetime(df['Next'], errors='coerce').dt.date
+    # 步驟 C: 處理無效日期 (NaT)，視為過期（今天可複習）
+    df['Next'] = df['Next'].fillna(today - pd.Timedelta(days=1))
 
 except Exception as e:
     st.error(f"日期轉換發生嚴重錯誤: {e}")
@@ -348,18 +350,17 @@ if st.session_state.demo_mode:
     due_indices = df.index.tolist()
 else:
     # 正常模式邏輯：
-    # 1. notna(): 排除轉換失敗的日期 (NaT)
-    # 2. <= today: 只選日期早於或等於今天的 (使用剛剛轉換成功的 Next_Obj)
-    mask = df['Next_Obj'].notna() & (df['Next_Obj'] <= today)
+    # [Fix] 因為 df['Next'] 和 today 都是 Pandas Timestamp，可以直接比較
+    mask = df['Next'] <= today
     due_indices = df[mask].index.tolist()
 
 # === 4. 除錯顯示 (Debug) ===
 with st.sidebar.expander("🕵️‍♀️ 日期格式檢查", expanded=False):
-    st.write(f"系統日期 (Today): {today}")
+    st.write(f"系統日期 (Today): {today.date()}") # 顯示時只顯示日期部分
     st.write(f"待複習題數: {len(due_indices)}")
     
-    debug_view = df[['Sentences', 'Next', 'Next_Obj']].copy()
-    debug_view['Is_Due'] = debug_view['Next_Obj'] <= today
+    debug_view = df[['Sentences', 'Next']].copy()
+    debug_view['Is_Due'] = debug_view['Next'] <= today
     st.write("轉換後的資料預覽：")
     st.dataframe(debug_view.head(5))
 
@@ -415,20 +416,15 @@ else:
     with c1: st.caption(f"📅 待複習: {len(due_indices)} 題")
     with c2: st.caption(f"🔥 連續答對: {row['Times']} 次")
     
-    # -----------------------------------------------------------
-    # [修改] 音檔生成邏輯
-    # 預設唸 Sentences，但如果是 Question/Phrases，我們希望聽到 Answer
+    # 音檔生成邏輯
     audio_source_text = row['Sentences']
-    
     if row['Tags'] in ['Question', 'Phrases']:
         if pd.notna(row['Answers']) and str(row['Answers']).strip() != "":
             audio_source_text = str(row['Answers'])
 
     audio_bytes = asyncio.run(play_audio(audio_source_text))
-    # -----------------------------------------------------------
 
     # --- 🃏 題目卡片區域 ---
-    # st.markdown('<div class="question-card">', unsafe_allow_html=True)
     st.markdown(f'<span class="tag-badge">{row["Tags"]}</span>', unsafe_allow_html=True)
 
     # === [Visibility Logic] 決定顯示什麼 ===
@@ -461,12 +457,15 @@ else:
 
     # === [Render] 渲染 ===
     
+    # 1. 顯示文字
     if show_text_initially:
         st.markdown(f'<p class="big-font">{text_content}</p>', unsafe_allow_html=True)
     
+    # 2. 顯示提示
     elif not st.session_state.q_processed:
         st.markdown('<p class="hint-text" style="font-size:1.2rem;">🎧 請仔細聆聽音檔回答問題...</p>', unsafe_allow_html=True)
 
+    # 3. 顯示音檔
     if show_audio_initially:
         st.audio(BytesIO(audio_bytes), format='audio/mpeg')
 
@@ -504,8 +503,8 @@ else:
                 
                 final_target = target_answer
                 if row['Tags'] == 'Phrases' and pd.isna(row['Answers']):
-                     match = re.search(r'\[(.*?)\]', row['Sentences'])
-                     if match: final_target = match.group(1)
+                      match = re.search(r'\[(.*?)\]', row['Sentences'])
+                      if match: final_target = match.group(1)
                 
                 if user_input.strip().lower() == final_target.strip().lower():
                     st.session_state.q_grade = 100.0
@@ -529,60 +528,37 @@ else:
         </div>
         """, unsafe_allow_html=True)
 
-        # 補救顯示 - 音檔
         if not show_audio_initially:
             st.caption("🔊 音檔 (答案):")
             st.audio(BytesIO(audio_bytes), format='audio/mpeg')
 
-        # 補救顯示 - 原文
         if not show_text_initially:
             st.markdown(f"<div style='margin-top:15px; text-align:left; padding:15px; background:#f1f5f9; border-radius:10px;'><b>📖 原文參考:</b><br>{row['Sentences']}</div>", unsafe_allow_html=True)
 
-        # ==========================================
-        # 💾 存檔邏輯 (修正版 - Date/Times/Next 完整處理)
-        # ==========================================
+        # [Fix] 存檔邏輯修正
         if st.session_state.q_saved_idx != current_idx:
-            
-            # 1. 準備變數
-            is_correct = st.session_state.q_grade >= 80.0
-            today_obj = datetime.now().date()
-            
-            try:
-                old_times = int(df.at[current_idx, 'Times'])
-            except:
-                old_times = 0
-
-            # 2. 計算新數值
-            if is_correct:
-                # 播放音效
+            if st.session_state.q_grade >= 80:
                 praises = ["Très bien !", "Excellent !", "Bravo !", "Magnifique !", "C'est super !"]
-                play_hidden_sound(random.choice(praises))
+                praise_text = random.choice(praises)
                 
-                new_times = old_times + 1
+                play_hidden_sound(praise_text)
                 
-                # 計算下次複習間隔 (費氏/指數數列)
-                intervals = [1, 2, 4, 7, 15, 30, 60] 
-                if new_times <= len(intervals):
-                    days_to_add = intervals[new_times - 1]
-                else:
-                    days_to_add = 60
+                # 更新 Times
+                df.at[current_idx, 'Times'] += 1
+                days_to_add = int(df.at[current_idx, 'Times'])
                 
-                next_date_obj = today_obj + timedelta(days=days_to_add)
-                st.toast(f"🎉 Level Up! 下次複習：{next_date_obj} (連對 {new_times} 次)")
+                # [Fix] 更新 Next (Timestamp 運算)
+                # 使用 pd.Timedelta 進行日期加法，today 已經是 Timestamp，所以結果也會是 Timestamp
+                new_date = today + pd.Timedelta(days=days_to_add)
+                df.at[current_idx, 'Next'] = new_date
                 
+                st.toast(f"🎉 Level Up! 下次複習: {new_date.strftime('%Y-%m-%d')}")
             else:
-                # 答錯
-                new_times = 0
-                next_date_obj = today_obj + timedelta(days=1) # 明天複習
-                st.toast("💪 繼續加油！已安排明日複習")
-
-            # 3. 寫入 DataFrame (全部轉成字串，防止格式跑掉)
-            # 這是最關鍵的一步，確保 Date 和 Next 都是純文字 "YYYY-MM-DD"
-            df.at[current_idx, 'Date'] = today_obj.strftime("%Y-%m-%d")
-            df.at[current_idx, 'Times'] = new_times
-            df.at[current_idx, 'Next'] = next_date_obj.strftime("%Y-%m-%d")
-
-            # 4. 寫入 Google Sheets
+                df.at[current_idx, 'Times'] = 0 
+                # [Fix] 答錯時重置為今天
+                df.at[current_idx, 'Next'] = today 
+                st.toast("💪 繼續加油！保持在今日進度")
+            
             save_data(df)
             st.session_state.q_saved_idx = current_idx
 
