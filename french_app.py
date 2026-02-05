@@ -102,7 +102,7 @@ st.markdown("""
         border: 1px solid #cbd5e1; /* 邊框加深 */
         text-align: center;
         font-size: 1.1rem;
-        color: #FFFFFF; /* 輸入文字強制黑色 */
+        color: #00008B; /* 輸入文字強制黑色 */
         font-weight: 600;
     }
 
