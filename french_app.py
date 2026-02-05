@@ -314,56 +314,55 @@ df = st.session_state.df
 
 # --- 修正後的邏輯 ---
 
-# === 1. 日期與模式處理 ===
-
-# === 1. 日期資料強力清洗 ===
-
 df = st.session_state.df
 today = datetime.now().date()
 
-# (A) 強制轉換日期格式
-# errors='coerce' 代表：讀不懂的格式就變成 NaT (空值)，不要報錯
-# 這樣我們就知道哪些日期有問題，而不是把它們全部變成今天
-df['Next'] = pd.to_datetime(df['Next'], errors='coerce')
+try:
+    # 步驟 A: 先全部轉成字串，並去除前後空白
+    df['Next'] = df['Next'].astype(str).str.strip()
+    
+    # 步驟 B: 將斜線 '/' 替換成橫線 '-' (解決 2026/2/6 格式問題)
+    # 這樣 2026/2/6 會變成 2026-2-6，Pandas 就能精準識別
+    df['Next'] = df['Next'].str.replace('/', '-', regex=False)
+    
+    # 步驟 C: 轉為日期物件
+    # errors='coerce' 代表解析失敗變成 NaT，不會報錯
+    df['Next'] = pd.to_datetime(df['Next'], errors='coerce').dt.date
 
-# (B) 排除無效日期 (NaT)
-# 這裡很重要：如果日期是 NaT (讀取失敗)，我們暫時不要把它算進「待複習」
-# 這樣就不會發生「全部都要複習」的慘劇
-valid_dates_mask = df['Next'].notna()
-
-# (C) 建立用於比對的 Series (只取日期部分)
-# 注意：這裡只對有效日期做 .dt.date，無效的保持為 NaT
-check_date_series = df['Next'].dt.date
+except Exception as e:
+    st.error(f"日期轉換發生嚴重錯誤: {e}")
 
 # === 2. 初始化 Demo 模式 ===
 if 'demo_mode' not in st.session_state:
     st.session_state.demo_mode = False
 
-# === 3. 篩選邏輯 (修正版) ===
+# === 3. 篩選邏輯 ===
 
 if st.session_state.demo_mode:
     # Demo 模式：全選
     due_indices = df.index.tolist()
-    mode_msg = "強制複習全部 (Demo)"
 else:
-    # 正常模式：
-    # 邏輯：(日期有效) AND (日期 <= 今天)
-    # 這樣未來的日期、或是格式錯誤的日期，都不會被選進來
-    due_indices = df[valid_dates_mask & (check_date_series <= today)].index.tolist()
-    mode_msg = "正常複習模式"
+    # 正常模式邏輯：
+    # 1. notna(): 排除轉換失敗的日期 (NaT)
+    # 2. <= today: 只選日期早於或等於今天的
+    # 這樣 "2026-02-06" (明天) 就不會被選進來
+    mask = df['Next'].notna() & (df['Next'] <= today)
+    due_indices = df[mask].index.tolist()
 
-# === 🛑 除錯工具 (Debug) - 如果還是全選，請打開這個看 ===
-with st.sidebar.expander("🕵️‍♀️ 資料除錯工具 (Debug)", expanded=False):
-    st.write(f"今天的日期: {today}")
-    st.write(f"待複習數量: {len(due_indices)}")
-    st.write("---")
-    st.write("預覽前 5 筆 'Next' 欄位解析結果：")
-    # 顯示原始資料與解析後的日期，讓你檢查是不是讀錯了
-    debug_df = df[['Sentences', 'Next']].copy()
-    debug_df['Is_Due'] = valid_dates_mask & (check_date_series <= today)
-    st.write(debug_df.head(5))
+# === 4. 除錯顯示 (Debug) ===
+# 建議暫時保留這個區塊，確認轉換是否成功
+with st.sidebar.expander("🕵️‍♀️ 日期格式檢查", expanded=False):
+    st.write(f"系統日期 (Today): {today}")
+    st.write(f"待複習題數: {len(due_indices)}")
+    
+    # 顯示前幾筆資料的轉換結果
+    debug_view = df[['Sentences', 'Next']].copy()
+    # 標記是否到期
+    debug_view['Is_Due'] = debug_view['Next'] <= today
+    st.write("轉換後的資料預覽：")
+    st.dataframe(debug_view.head(5))
 
-# === 4. 顯示邏輯 (Bravo 畫面) ===
+# === 5. 顯示邏輯 (Bravo 畫面) ===
 
 if not due_indices:
     st.markdown("---")
@@ -381,24 +380,21 @@ if not due_indices:
             st.rerun()
 
 else:
-    # 顯示退出 Demo 按鈕
     if st.session_state.demo_mode:
         st.info(f"💡 目前為 Demo 模式 (共 {len(due_indices)} 題)")
         if st.button("❌ 退出 Demo 模式", use_container_width=True):
             st.session_state.demo_mode = False
             st.session_state.current_q_idx = None
             st.rerun()
-            
-    # === 5. 選題與變數重置 ===
+
+    # === 6. 選題與變數重置 ===
     
-    # 防呆：如果 current_q_idx 變成 NaN 或不在清單中，重選
     if st.session_state.current_q_idx is None or st.session_state.current_q_idx not in due_indices:
         st.session_state.current_q_idx = random.choice(due_indices)
     
     current_idx = st.session_state.current_q_idx
     row = df.loc[current_idx]
 
-    # 換題檢測
     if current_idx != st.session_state.last_q_idx:
         st.session_state.q_processed = False
         st.session_state.q_user_text = ""
@@ -411,7 +407,6 @@ else:
     # 進度條
     total_count = len(df)
     remaining = len(due_indices)
-    # 分母為 0 的防呆
     progress_val = 1.0 - (remaining / total_count) if total_count > 0 else 0.0
     
     st.progress(progress_val)
