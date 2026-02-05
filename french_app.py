@@ -310,11 +310,30 @@ st.title("🇫🇷 French SRS Master")
 if not groq_api_key:
     st.info("💡 提示：請在左側選單輸入 API Key 以啟用語音功能。")
 
-today = datetime.now().date()
 df = st.session_state.df
-due_indices = df[df['Next'] <= today].index.tolist()
+
+# --- 修正後的邏輯 ---
+
+# 1. 確保日期格式一致 (先把 Next 轉成純日期，避免時間戳導致比較錯誤)
+df['Next'] = pd.to_datetime(df['Next']).dt.date
+today = datetime.now().date()
+
+# 2. 初始化 Demo 模式狀態 (如果還沒設定過)
+if 'demo_mode' not in st.session_state:
+    st.session_state.demo_mode = False
+
+# 3. 根據狀態決定 due_indices (這是關鍵修正)
+if st.session_state.demo_mode:
+    # 如果在 Demo 模式，取出全部題目
+    due_indices = df.index.tolist()
+else:
+    # 正常模式，只取到期題目
+    due_indices = df[df['Next'] <= today].index.tolist()
+
+# === 顯示邏輯 ===
 
 if not due_indices:
+    # 這裡代表：正常模式下沒有到期題目，且沒有開啟 Demo 模式
     st.markdown("---")
     st.markdown("""
     <div style="text-align: center; padding: 60px;">
@@ -325,12 +344,22 @@ if not due_indices:
     
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
+        # 按下按鈕只負責改變 session_state，然後 rerun
         if st.button("🔄 強制複習全部 (Demo Mode)", use_container_width=True):
-            due_indices = df.index.tolist()
-            st.session_state.current_q_idx = random.choice(due_indices)
-            st.rerun()
+            st.session_state.demo_mode = True  # 設定旗標
+            st.rerun() # 重跑後會進入下方的 else 區塊
 
 else:
+    # --- 進入複習流程 ---
+
+    # (選用) 在 Demo 模式下顯示一個退出的按鈕
+    if st.session_state.demo_mode:
+        st.info("💡 目前為 Demo 模式 (複習全部題目)")
+        if st.button("❌ 退出 Demo 模式"):
+            st.session_state.demo_mode = False
+            st.session_state.current_q_idx = None # 重置題目指標
+            st.rerun()
+
     # 選題邏輯
     if st.session_state.current_q_idx is None or st.session_state.current_q_idx not in due_indices:
         st.session_state.current_q_idx = random.choice(due_indices)
@@ -348,13 +377,15 @@ else:
 
     target_answer = get_target_answer(row)
 
-    # 進度條
-    progress_val = 1.0 - (len(due_indices) / len(df))
+    # 進度條 (計算方式：總題數 - 剩餘待複習數)
+    total_len = len(df) if st.session_state.demo_mode else len(df) # 簡化邏輯，分母通常用總題庫數較直觀
+    # 如果你希望進度條在 Demo 模式下針對「這次複習」顯示，可以調整分母，但這裡維持原邏輯
+    progress_val = 1.0 - (len(due_indices) / len(df)) if len(df) > 0 else 0
+    
     st.progress(progress_val)
     c1, c2 = st.columns([1, 1])
     with c1: st.caption(f"📅 待複習: {len(due_indices)} 題")
     with c2: st.caption(f"🔥 連續答對: {row['Times']} 次")
-
     # -----------------------------------------------------------
     # [修改] 音檔生成邏輯
     # 預設唸 Sentences，但如果是 Question/Phrases，我們希望聽到 Answer
