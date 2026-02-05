@@ -102,7 +102,7 @@ st.markdown("""
         border: 1px solid #cbd5e1; /* 邊框加深 */
         text-align: center;
         font-size: 1.1rem;
-        color: #000000; /* 輸入文字強制黑色 */
+        color: #FFFFFF; /* 輸入文字強制黑色 */
         font-weight: 600;
     }
 
@@ -190,32 +190,62 @@ def transcribe_with_groq(api_key, audio_bytes):
     except Exception as e:
         return f"Error: {str(e)}"
 
+import json 
+
 def llm_grade_answer(api_key, user_text, context_text, correct_answer):
     if not api_key: return 0.0, "請輸入 API Key"
+    
     client = Groq(api_key=api_key)
+    
+    # 修改 Prompt：要求 JSON 格式，並強調給予修正建議
     prompt = f"""
-    Context/Scenario: "{context_text}"
-    Reference Ideal Answer: "{correct_answer}"
-    User's Answer: "{user_text}"
+    You are a strictly helpful French language tutor.
     
-    There is no reference ideal answer if the problem is short conversation.
-    So, please grade it based on daily conversational standards.
-    Task: Grade the User's Answer from 0.00 to 100.00.
-    Criteria: 
-    1. Does the user convey the meaning of the Reference Ideal Answer?
-    2. Is the grammar correct?
+    Scenario/Context: "{context_text}"
+    Reference Answer: "{correct_answer}"
+    User's Input: "{user_text}"
     
-    Return ONLY the number (e.g. 85.50).
+    Task:
+    1. Compare the User's Input with the Reference Answer (if provided) or judge based on natural French conversation standards.
+    2. Check for grammar errors, wrong vocabulary, or unnatural phrasing.
+    3. Grade from 0 to 100.
+    4. Provide a "feedback" string:
+       - If perfect: say "Parfait !"
+       - If there are errors: Provide the CORRECTED sentence and a very brief explanation (in Traditional Chinese or English).
+    
+    IMPORTANT: You must return ONLY a valid JSON object. Do not add markdown code blocks.
+    Format:
+    {{
+        "score": 85.5,
+        "feedback": "Your corrected sentence here. (Explanation)"
+    }}
     """
+    
     try:
         chat = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model="llama-3.1-8b-instant",
+            model="llama-3.3-70b-versatile",
+            # 加上這個參數強制讓模型輸出 JSON，降低格式錯誤機率
+            response_format={"type": "json_object"} 
         )
-        match = re.search(r'\d+(\.\d+)?', chat.choices[0].message.content)
-        return float(match.group()) if match else 0.0, "AI Graded"
-    except:
-        return 0.0, "AI Error"
+        
+        content = chat.choices[0].message.content
+        
+        # 解析 JSON
+        data = json.loads(content)
+        score = float(data.get("score", 0.0))
+        feedback = data.get("feedback", "No feedback provided.")
+        
+        return score, feedback
+
+    except json.JSONDecodeError:
+        # 如果 JSON 解析失敗，嘗試用舊方法的 regex 抓分數做為備案
+        match = re.search(r'\d+(\.\d+)?', content)
+        fallback_score = float(match.group()) if match else 0.0
+        return fallback_score, "格式解析錯誤，但已記錄分數。"
+        
+    except Exception as e:
+        return 0.0, f"AI Error: {str(e)}"
     
 def play_hidden_sound(text):
     """生成語音並隱藏播放，完全不顯示播放器"""
@@ -402,16 +432,23 @@ else:
                 audio_data = mic_recorder(start_prompt="開始錄音", stop_prompt="⏹️ 完成送出", key=f'mic_{current_idx}')
                 
                 if audio_data:
+                    # 1. 先轉錄語音
                     user_text = transcribe_with_groq(groq_api_key, audio_data['bytes'])
                     st.session_state.q_user_text = user_text
                     
-                    if row['Tags'] == 'Conversation':
+                    # 2. 判斷評分邏輯
+                    # 如果是 Conversation 或 Speaking 且有 API Key，就用 AI 評分並給建議
+                    if row['Tags'] in ['Conversation', 'Speaking'] and groq_api_key:
                         grade, msg = llm_grade_answer(groq_api_key, user_text, row['Sentences'], target_answer)
                         st.session_state.q_grade = grade
-                        st.session_state.q_ai_msg = msg
+                        st.session_state.q_ai_msg = msg  # 儲存 AI 的修正建議
+                    
+                    # 其他情況 (如單字題、或是沒有 API Key)，使用單純的文字比對
                     else:
                         st.session_state.q_grade = float(fuzz.ratio(user_text.lower(), target_answer.lower()))
+                        st.session_state.q_ai_msg = ""   # ⚠️ 重要：必須清空建議，避免上一題的 AI 訊息殘留
                     
+                    # 3. 完成處理並重整頁面
                     st.session_state.q_processed = True
                     st.rerun()
 
