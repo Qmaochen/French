@@ -314,26 +314,35 @@ df = st.session_state.df
 
 # --- 修正後的邏輯 ---
 
-# 1. 確保日期格式一致 (先把 Next 轉成純日期，避免時間戳導致比較錯誤)
-df['Next'] = pd.to_datetime(df['Next']).dt.date
+# === 1. 日期與模式處理 ===
+
+# 確保我們操作的是 DataFrame 的副本，不直接修改原始 Session State，避免越改越亂
+df = st.session_state.df
 today = datetime.now().date()
 
-# 2. 初始化 Demo 模式狀態 (如果還沒設定過)
+# 轉換 'Next' 欄位為標準日期格式 (處理可能的格式問題)
+# errors='coerce' 會將無法辨識的日期變成 NaT，避免程式報錯
+# 這裡我們只在計算時使用這個 temp_next，不影響原始資料
+temp_next_series = pd.to_datetime(df['Next'], errors='coerce').dt.date
+
+# 初始化 Demo Mode (如果沒有這個狀態，預設為 False)
 if 'demo_mode' not in st.session_state:
     st.session_state.demo_mode = False
 
-# 3. 根據狀態決定 due_indices (這是關鍵修正)
+# === 2. 篩選邏輯 ===
+
 if st.session_state.demo_mode:
-    # 如果在 Demo 模式，取出全部題目
+    # 模式 A: Demo 模式 -> 選取「全部」題目
     due_indices = df.index.tolist()
 else:
-    # 正常模式，只取到期題目
-    due_indices = df[df['Next'] <= today].index.tolist()
+    # 模式 B: 正常模式 -> 選取「日期 <= 今天」的題目
+    # 注意：這裡使用剛剛標準化過的 temp_next_series 來比對
+    # fillna(today) 的作用是：如果日期格式爛掉讀不出來，預設為「今天到期」以免題目消失
+    due_indices = df[temp_next_series.fillna(today) <= today].index.tolist()
 
-# === 顯示邏輯 ===
+# === 3. 顯示邏輯 (Bravo 畫面) ===
 
 if not due_indices:
-    # 這裡代表：正常模式下沒有到期題目，且沒有開啟 Demo 模式
     st.markdown("---")
     st.markdown("""
     <div style="text-align: center; padding: 60px;">
@@ -344,30 +353,30 @@ if not due_indices:
     
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        # 按下按鈕只負責改變 session_state，然後 rerun
+        # 按下按鈕，開啟 Demo 模式並重整
         if st.button("🔄 強制複習全部 (Demo Mode)", use_container_width=True):
-            st.session_state.demo_mode = True  # 設定旗標
-            st.rerun() # 重跑後會進入下方的 else 區塊
-
-else:
-    # --- 進入複習流程 ---
-
-    # (選用) 在 Demo 模式下顯示一個退出的按鈕
-    if st.session_state.demo_mode:
-        st.info("💡 目前為 Demo 模式 (複習全部題目)")
-        if st.button("❌ 退出 Demo 模式"):
-            st.session_state.demo_mode = False
-            st.session_state.current_q_idx = None # 重置題目指標
+            st.session_state.demo_mode = True
             st.rerun()
 
-    # 選題邏輯
+else:
+    # 如果在 Demo 模式，顯示退出按鈕
+    if st.session_state.demo_mode:
+        st.info(f"💡 目前為 Demo 模式 (共 {len(due_indices)} 題)")
+        if st.button("❌ 退出 Demo 模式 (回到今日進度)", use_container_width=True):
+            st.session_state.demo_mode = False
+            st.session_state.current_q_idx = None # 重置當前題目
+            st.rerun()
+
+    # === 4. 選題與變數重置 ===
+    
+    # 如果當前沒有題目，或當前題目不在待複習清單中，隨機選一題
     if st.session_state.current_q_idx is None or st.session_state.current_q_idx not in due_indices:
         st.session_state.current_q_idx = random.choice(due_indices)
     
     current_idx = st.session_state.current_q_idx
     row = df.loc[current_idx]
 
-    # 換題檢測
+    # 換題檢測 (如果題目 index 變了，重置輸入框與評分)
     if current_idx != st.session_state.last_q_idx:
         st.session_state.q_processed = False
         st.session_state.q_user_text = ""
@@ -377,10 +386,13 @@ else:
 
     target_answer = get_target_answer(row)
 
-    # 進度條 (計算方式：總題數 - 剩餘待複習數)
-    total_len = len(df) if st.session_state.demo_mode else len(df) # 簡化邏輯，分母通常用總題庫數較直觀
-    # 如果你希望進度條在 Demo 模式下針對「這次複習」顯示，可以調整分母，但這裡維持原邏輯
-    progress_val = 1.0 - (len(due_indices) / len(df)) if len(df) > 0 else 0
+    # 進度條計算
+    total_count = len(df)
+    # 如果是 Demo 模式，進度條顯示 "還剩多少沒做" (相對於全部)
+    # 如果是 正常模式，進度條顯示 "今日進度" (相對於全部)
+    # 這裡維持統一邏輯：已完成題數 / 總題數
+    remaining = len(due_indices)
+    progress_val = 1.0 - (remaining / total_count) if total_count > 0 else 0.0
     
     st.progress(progress_val)
     c1, c2 = st.columns([1, 1])
