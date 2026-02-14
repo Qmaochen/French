@@ -498,7 +498,22 @@ else:
             st.markdown(f"<div style='margin-top:15px; text-align:left; padding:15px; background:#f1f5f9; border-radius:10px;'><b>📖 原文參考:</b><br>{row['Sentences']}</div>", unsafe_allow_html=True)
 
         if st.session_state.q_saved_idx != current_idx:
-            if st.session_state.q_grade >= 80:
+
+            # score session is larger than 90 -> Cest tres bien
+            if st.session_state.q_grade >= 90:
+                praises = ["Très bien !", "Excellent !", "Bravo !", "Magnifique !", "C'est super !"]
+                play_hidden_sound(random.choice(praises))
+                
+                df.at[current_idx, 'Times'] += 2
+                days_to_add = int(df.at[current_idx, 'Times'])
+                # 更新 Next (Timestamp 運算)
+                new_date = today + pd.Timedelta(days=days_to_add)
+                df.at[current_idx, 'Next'] = new_date
+                
+                st.toast(f"🎉 Level Up! 下次複習: {new_date.strftime('%Y-%m-%d')}")
+
+            # score session is larger than 80 -> C'est bien.
+            elif st.session_state.q_grade >= 80:
                 praises = ["Très bien !", "Excellent !", "Bravo !", "Magnifique !", "C'est super !"]
                 play_hidden_sound(random.choice(praises))
                 
@@ -509,6 +524,19 @@ else:
                 df.at[current_idx, 'Next'] = new_date
                 
                 st.toast(f"🎉 Level Up! 下次複習: {new_date.strftime('%Y-%m-%d')}")
+
+            # score session is larger than 70 -> pas mal
+            elif st.session_state.q_grade >= 70:
+                praises = ["C'est pas mal."]
+                play_hidden_sound(random.choice(praises))
+                
+                days_to_add = int(df.at[current_idx, 'Times'])
+                # 更新 Next (Timestamp 運算)
+                new_date = today + pd.Timedelta(days=days_to_add) + 1
+                df.at[current_idx, 'Next'] = new_date
+                
+                st.toast(f"🎉 Level Up! 下次複習: {new_date.strftime('%Y-%m-%d')}")
+
             else:
                 # df.at[current_idx, 'Times'] = 0 
                 df.at[current_idx, 'Next'] = today 
