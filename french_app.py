@@ -213,9 +213,10 @@ def llm_grade_answer(api_key, user_text, context_text, correct_answer):
     
     Task:
     1. If there is a Reference Answer, compare the User's Input with the Reference Answer. 
-    2. Check for grammar errors, wrong vocabulary, or unnatural phrasing.
-    3. If there is no big problem, give at least 75.
-    4. Provide a "feedback" string:
+    2. The User' Input is through speaking, so ignore some translation error if any. 
+    3. Check for grammar errors, wrong vocabulary, or unnatural phrasing.
+    4. If there is no big problem, give at least 75.
+    5. Provide a "feedback" string:
        - If perfect: say "Parfait !"
        - If there are errors: Provide the CORRECTED sentence and a very brief explanation.
     
