@@ -204,19 +204,20 @@ def llm_grade_answer(api_key, user_text, context_text, correct_answer):
     client = Groq(api_key=api_key)
     
     prompt = f"""
-    You are a strictly helpful French language tutor.
+    You are a helpful French language tutor.
+    Your student is at A1 to A2 level.
     
     Scenario/Context: "{context_text}"
     Reference Answer: "{correct_answer}"
     User's Input: "{user_text}"
     
     Task:
-    1. Compare the User's Input with the Reference Answer.
+    1. If there is a Reference Answer, compare the User's Input with the Reference Answer. 
     2. Check for grammar errors, wrong vocabulary, or unnatural phrasing.
-    3. Grade from 0 to 100.
+    3. If there is no big problem, give at least 75.
     4. Provide a "feedback" string:
        - If perfect: say "Parfait !"
-       - If there are errors: Provide the CORRECTED sentence and a very brief explanation (in Traditional Chinese or English).
+       - If there are errors: Provide the CORRECTED sentence and a very brief explanation.
     
     IMPORTANT: You must return ONLY a valid JSON object.
     Format:
@@ -390,7 +391,7 @@ else:
     st.progress(progress_val)
     c1, c2 = st.columns([1, 1])
     with c1: st.caption(f"📅 待複習: {len(due_indices)} 題")
-    with c2: st.caption(f"🔥 連續答對: {row['Times']} 次")
+    with c2: st.caption(f"🔥 總共答對: {row['Times']} 次")
     
     # 音檔生成
     audio_source_text = row['Sentences']
@@ -508,7 +509,7 @@ else:
                 
                 st.toast(f"🎉 Level Up! 下次複習: {new_date.strftime('%Y-%m-%d')}")
             else:
-                df.at[current_idx, 'Times'] = 0 
+                # df.at[current_idx, 'Times'] = 0 
                 df.at[current_idx, 'Next'] = today 
                 st.toast("💪 繼續加油！保持在今日進度")
             
