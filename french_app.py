@@ -530,9 +530,9 @@ else:
                 praises = ["C'est pas mal."]
                 play_hidden_sound(random.choice(praises))
                 
-                days_to_add = int(df.at[current_idx, 'Times'])
+                days_to_add = int(df.at[current_idx, 'Times'])-1
                 # 更新 Next (Timestamp 運算)
-                new_date = today + pd.Timedelta(days=days_to_add) + 1
+                new_date = today + pd.Timedelta(days=days_to_add)
                 df.at[current_idx, 'Next'] = new_date
                 
                 st.toast(f"🎉 Level Up! 下次複習: {new_date.strftime('%Y-%m-%d')}")
