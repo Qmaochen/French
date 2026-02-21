@@ -499,21 +499,8 @@ else:
 
         if st.session_state.q_saved_idx != current_idx:
 
-            # score session is larger than 90 -> Cest tres bien
-            if st.session_state.q_grade >= 90:
-                praises = ["Très bien !", "Excellent !", "Bravo !", "Magnifique !", "C'est super !"]
-                play_hidden_sound(random.choice(praises))
-                
-                df.at[current_idx, 'Times'] += 2
-                days_to_add = int(df.at[current_idx, 'Times'])
-                # 更新 Next (Timestamp 運算)
-                new_date = today + pd.Timedelta(days=days_to_add)
-                df.at[current_idx, 'Next'] = new_date
-                
-                st.toast(f"🎉 Level Up! 下次複習: {new_date.strftime('%Y-%m-%d')}")
-
             # score session is larger than 80 -> C'est bien.
-            elif st.session_state.q_grade >= 80:
+            if st.session_state.q_grade >= 80:
                 praises = ["Très bien !", "Excellent !", "Bravo !", "Magnifique !", "C'est super !"]
                 play_hidden_sound(random.choice(praises))
                 
