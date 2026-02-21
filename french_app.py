@@ -518,7 +518,7 @@ else:
                 play_hidden_sound(random.choice(praises))
                 
                 df.at[current_idx, 'Times'] += 1
-                days_to_add = 2**(int(df.at[current_idx, 'Times'])-1) # 指數級增加間隔
+                days_to_add = 2**(int(df.at[current_idx, 'Times'])-1) + random.choice([-1, 0, 1])# 指數級增加間隔
                 # 更新 Next (Timestamp 運算)
                 new_date = today + pd.Timedelta(days=days_to_add)
                 df.at[current_idx, 'Next'] = new_date
